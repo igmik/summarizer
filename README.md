@@ -22,4 +22,4 @@ Provide a config file containing whitelist for authorized telegram chat ID.
 Allow adding chat ID in real time without bot restart
 
 ### TODO
-Add a function to use another prompt that will produce result with a timestamps from the video. (captions.generate_srt_captions() already produces the text with time codes).
+Add a function to use another prompt that will produce result with a timestamps from the video. (captions.generate_srt_captions() already produces the text with time codes). Note that input will be larger, hence, more expensive.
