@@ -1,0 +1,5 @@
+openai
+pytube==15.0.0
+python-telegram-bot==13.12
+tiktoken
+pyyaml
