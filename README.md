@@ -19,7 +19,7 @@ Provide your personal TELEGRAM_API_TOKEN and OPENAI_AIP_TOKEN in the correspondi
 Provide a config file containing whitelist for authorized telegram chat ID.
 
 ### TODO
-Add separate caching for individual chat ID for seen YouTube links in Summarizer
+Allow adding chat ID in real time without bot restart
 
 ### TODO
-Allow adding chat ID in real time without bot restart
+Add a function to use another prompt that will produce result with a timestamps from the video. (captions.generate_srt_captions() already produces the text with time codes).
