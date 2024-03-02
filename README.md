@@ -23,3 +23,6 @@ Allow adding chat ID in real time without bot restart
 
 ### TODO
 Add a function to use another prompt that will produce result with a timestamps from the video. (captions.generate_srt_captions() already produces the text with time codes). Note that input will be larger, hence, more expensive.
+
+### Note
+The patches/innertube.py is required to replace original file in pytube module as by some reason version 15.0.0 uses ANDROID_MUSIC as a default schema for the media source, but we need WEB to obtain the captions. 
