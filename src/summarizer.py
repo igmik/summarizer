@@ -147,7 +147,7 @@ class Summarizer:
             prompt = PROMPT_RU
             final_prompt = FINAL_PROMPT_RU
          elif 'a.en' in source.captions or 'en' in source.captions:
-            captions = source.captions.get('en', captions = source.captions.get('a.en', None))
+            captions = source.captions.get('en', source.captions.get('a.en', None))
             prompt = PROMPT_EN
             final_prompt = FINAL_PROMPT_EN
          if not captions:
