@@ -1,6 +1,7 @@
 from datetime import datetime
 import logging
 import os
+import re
 import traceback
 from typing import Optional
 
@@ -15,6 +16,7 @@ logger = logging.getLogger('bot')
 
 # Pre-assign menu text
 HELP_USAGE = "Натрави меня реплаем на сообщение, в котором есть ссылка на YouTube видео и напиши /short@imikdev_bot"
+HELP_USAGE_CLARIFY = "Натрави меня реплаем на сообщение, в котором есть ссылка на YouTube видео. Напиши в одном реплае /clarify@imikdev_bot и добавь что нужно уточнить."
 
 class AlwaysInWhitelist:
     def __eq__(self, _):
@@ -36,26 +38,14 @@ def setup_logger(log_level: Optional[str]='INFO', logfile: Optional[str]=None) -
         fileHandler.setFormatter(log_formatter)
         logger.addHandler(fileHandler)
 
-def short(update: Update, context: CallbackContext) -> None:
-    """This handler will exctract YouTube link from the replayed message and will apply summarize it"""
-
-    # Print to console
-    logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
-
-    if update.message.chat_id not in id_whitelist:
-        context.bot.send_message(
-            update.message.chat_id,
-            reply_to_message_id=update.message.message_id,
-            text="Unauthorized access. Denied.",
-            entities=update.message.entities
-        )
-        return
-
+def process_request(update: Update, context: CallbackContext, clarify=None) -> None:
     if update.message.reply_to_message:
         message = update.message.reply_to_message.text
         logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} received {message}')
         try:
-            reply = summarizer.get_youtube_summary(chat_id=update.message.chat_id, text=message)
+            if clarify:
+                clarify = re.sub(r"/clarify|@imikdev_bot", "", update.message.text)
+            reply = summarizer.get_youtube_summary(chat_id=update.message.chat_id, text=message, clarify=clarify)
         except AlreadySeenException:
             logger.debug(f"Seen this url before {message}")
             reply = f"Была уже эта ссылка. Не ленись поскролить выше."
@@ -77,7 +67,7 @@ def short(update: Update, context: CallbackContext) -> None:
             reply = f"Что-то пошло не так {message}. Ошибка: {e}"
             pass
     else:
-        reply = HELP_USAGE
+        reply = HELP_USAGE_CLARIFY if clarify else HELP_USAGE
 
     chunk_size = 3500
     chunks = [
@@ -94,6 +84,19 @@ def short(update: Update, context: CallbackContext) -> None:
             entities=update.message.entities
         )
 
+def clarify(update: Update, context: CallbackContext) -> None:
+    """This handler will exctract YouTube link from the replayed message and will apply custom prompt to it"""
+
+    # Print to console
+    logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
+    process_request(update=update, context=context, clarify=True)
+
+def short(update: Update, context: CallbackContext) -> None:
+    """This handler will exctract YouTube link from the replayed message and will apply summarize it"""
+
+    # Print to console
+    logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
+    process_request(update=update, context=context)
 
 def main() -> None:
     import argparse
@@ -126,6 +129,7 @@ def main() -> None:
 
     # Register commands
     dispatcher.add_handler(CommandHandler("short", short))
+    dispatcher.add_handler(CommandHandler("clarify", clarify))
 
     # Start the Bot
     updater.start_polling()
