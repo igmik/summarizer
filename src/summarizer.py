@@ -108,6 +108,8 @@ class Summarizer:
          )
          response = completion.choices[0].message.content.strip()
          responses.append(response)
+
+      logger.debug(responses)
       
       if final_prompt:
          response = self.client.chat.completions.create(
@@ -173,7 +175,8 @@ class Summarizer:
          raise NoCaptionsException(f"Cannot get captions for video{url}")
 
       reply = self.summarize(text, prompt, final_prompt)
-      self.seen[chat_id][source.video_id] = time.time()
+      if not clarify:
+         self.seen[chat_id][source.video_id] = time.time()
       return reply
 
 if __name__ == '__main__':
