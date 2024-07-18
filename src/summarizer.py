@@ -146,6 +146,7 @@ class Summarizer:
             raise AlreadySeenException(f"Already seen it previously")
       
       try:
+         source.bypass_age_gate()
          captions = None
          if 'a.ru' in source.captions or 'ru' in source.captions:
             captions = source.captions.get('ru', source.captions.get('a.ru', None))
