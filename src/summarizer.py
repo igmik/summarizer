@@ -20,7 +20,7 @@ FINAL_PROMPT_RU = "Пронумеруй каждый тезис заново."
 PROMPT_EN = "Summarize main points from the text."
 FINAL_PROMPT_EN = "Renumerate each point again."
 
-PRICE = {'gpt-3.5-turbo': 0.0005, 'gpt-4': 0.03}
+PRICE = {'gpt-3.5-turbo': 0.0005, 'gpt-4o': 0.005, 'gpt-4o-mini': 0.00015}
 
 
 def get_youtube_url(text:str) -> str:
@@ -33,10 +33,10 @@ def get_youtube_url(text:str) -> str:
       else:
          return False
 
-def calculate_cost(tokens: List[int]) -> int:
+def calculate_cost(tokens: List[int], chat_model: str) -> int:
    """Cost calculation in rub"""   
    size = len(tokens) / 1000
-   cost = size * PRICE['gpt-3.5-turbo']
+   cost = size * PRICE[chat_model]
    return int(cost * 100 * 1.1) + 1
 
 def xml_caption_to_text(xml_captions: str) -> str:
@@ -53,7 +53,7 @@ def xml_caption_to_text(xml_captions: str) -> str:
 class Summarizer:
    """Main summarizer logic."""
 
-   def __init__(self, chat_model: str='gpt-3.5-turbo', model_token_limit: int=8192) -> None:
+   def __init__(self, chat_model: str='gpt-4o-mini', model_token_limit: int=128000) -> None:
       """Construct a :class:`Summarizer <Summarizer>`.
 
       :param chat_model:
@@ -63,9 +63,9 @@ class Summarizer:
       """
       self.client = OpenAI()
       self.chat_model = chat_model
-      self.max_tokens = 4000
+      self.max_tokens = 55000
       self.model_token_limit = model_token_limit
-      self.tokenizer = tiktoken.encoding_for_model(self.chat_model)
+      self.tokenizer = tiktoken.encoding_for_model(chat_model)
       self.seen = collections.defaultdict(dict)
 
    def split_to_chunks(self, text_data: str, prompt: str) -> List[str]:
@@ -90,7 +90,7 @@ class Summarizer:
       """
       chunks = self.split_to_chunks(context, prompt)
 
-      cost = calculate_cost(self.tokenizer.encode(context))
+      cost = calculate_cost(self.tokenizer.encode(context), self.chat_model)
       logger.info(f"Cost is {cost}")
       if cost > 10:
          raise TooExpensiveException(cost)
@@ -111,7 +111,7 @@ class Summarizer:
 
       logger.debug(responses)
       
-      if final_prompt:
+      if final_prompt and len(responses) > 1:
          response = self.client.chat.completions.create(
             model=self.chat_model,
             messages=[
@@ -154,7 +154,7 @@ class Summarizer:
                prompt = PROMPT_RU
                final_prompt = FINAL_PROMPT_RU
             else:
-               prompt = f"Это транскрипция видео в формате SRT. Покажи временную метку где говорится о {clarify}. Если в видео этого нет, напиши 'NOT_FOUND'"
+               prompt = f"Это транскрипция видео в формате SRT. Покажи временную метку где говорится про {clarify}. Если в видео этого нет, напиши 'NOT_FOUND'"
                final_prompt = None
          elif 'a.en' in source.captions or 'en' in source.captions:
             captions = source.captions.get('en', source.captions.get('a.en', None))
