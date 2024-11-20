@@ -14,8 +14,8 @@ from exceptions import *
 
 logger = logging.getLogger('bot.summarizer')
 
-# PROMPT_RU = "Напиши главные тезисы взятые из текста субтитров в формате SRT."
-PROMPT_RU = "Напиши главные тезисы из текста."
+PROMPT_RU = "Это транскрипция видео в формате SRT. Напиши главные тезисы взятые из текста и поставь временную метку начала тезиса"
+# PROMPT_RU = "Напиши главные тезисы из текста."
 FINAL_PROMPT_RU = "Пронумеруй каждый тезис заново."
 PROMPT_EN = "Summarize main points from the text."
 FINAL_PROMPT_EN = "Renumerate each point again."
@@ -152,7 +152,8 @@ class Summarizer:
             captions = source.captions.get('ru', source.captions.get('a.ru', None))
             if not clarify:
                prompt = PROMPT_RU
-               final_prompt = FINAL_PROMPT_RU
+               # final_prompt = FINAL_PROMPT_RU
+               final_prompt = None
             else:
                prompt = f"Это транскрипция видео в формате SRT. Покажи временную метку где говорится про {clarify}. Если в видео этого нет, напиши 'NOT_FOUND'"
                final_prompt = None
@@ -167,10 +168,10 @@ class Summarizer:
          if not captions:
             raise NoCaptionsException
          
-         if clarify:
-            text = captions.generate_srt_captions()
-         else:
-            text = xml_caption_to_text(captions.xml_captions)
+         # if clarify:
+         text = captions.generate_srt_captions()
+         # else:
+         #    text = xml_caption_to_text(captions.xml_captions)
       except Exception as e:
          logger.error(e)
          raise NoCaptionsException(f"Cannot get captions for video{url}")
