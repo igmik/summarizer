@@ -155,7 +155,7 @@ class Summarizer:
                # final_prompt = FINAL_PROMPT_RU
                final_prompt = None
             else:
-               prompt = f"Это транскрипция видео в формате SRT. Покажи временную метку где говорится про {clarify}. Если в видео этого нет, напиши 'NOT_FOUND'"
+               prompt = f"Это транскрипция к видео в формате SRT. Проанализируй текст и перескажи что говорится про \"{clarify}\". Покажи временные метки где об этом говорится. Если об этом ничего нет напиши 'NOT_FOUND'"
                final_prompt = None
          elif 'a.en' in source.captions or 'en' in source.captions:
             captions = source.captions.get('en', source.captions.get('a.en', None))
