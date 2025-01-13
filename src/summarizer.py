@@ -6,8 +6,10 @@ import time
 from typing import List
 from xml.etree import ElementTree
 from openai import OpenAI
-from pytube import YouTube
 from urllib.parse import urlparse
+
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.formatters import SRTFormatter
 
 import tiktoken
 from exceptions import *
@@ -17,7 +19,7 @@ logger = logging.getLogger('bot.summarizer')
 PROMPT_RU = "Это транскрипция видео в формате SRT. Напиши главные тезисы взятые из текста и поставь временную метку начала тезиса"
 # PROMPT_RU = "Напиши главные тезисы из текста."
 FINAL_PROMPT_RU = "Пронумеруй каждый тезис заново."
-PROMPT_EN = "Summarize main points from the text."
+PROMPT_EN = "This is a transcript in SRT format. Summarize main points from the text and add the timestamps for each point."
 FINAL_PROMPT_EN = "Renumerate each point again."
 
 PRICE = {'gpt-3.5-turbo': 0.0005, 'gpt-4o': 0.005, 'gpt-4o-mini': 0.00015}
@@ -32,6 +34,14 @@ def get_youtube_url(text:str) -> str:
          return url
       else:
          return False
+
+def get_youtube_video_id(url:str) -> str:
+   """Get video ID from YouTube URL"""
+   params = re.search(r'(?:^|\W)(?:youtube(?:-nocookie)?\.com/(?:.*[?&]v=|v/|e(?:mbed)?/|[^/]+/.+/)|youtu\.be/)([\w-]+)', url)
+   if params:
+      return params.group(1)
+   else:
+      return False
 
 def calculate_cost(tokens: List[int], chat_model: str) -> int:
    """Cost calculation in rub"""   
@@ -137,19 +147,22 @@ class Summarizer:
       if not url:
          raise NotYoutubeUrlException(f"Url {url} is not a YouTube url")
       
-      source = YouTube(url, use_oauth=False)
-      if not source:
-         raise NotYoutubeUrlException(f"Url {url} is not a YouTube url")
+      video_id = get_youtube_video_id(url)
+      if not video_id:
+         raise NotYoutubeUrlException(f"Url {url} is not a YouTube url as it doesn't contain video ID")
+      
+      transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+      transcript = transcript_list.find_transcript(['ru', 'en'])
       
       if chat_id in self.seen and not clarify:
-         if source.video_id in self.seen[chat_id]:
+         if video_id in self.seen[chat_id]:
             raise AlreadySeenException(f"Already seen it previously")
       
       try:
-         source.bypass_age_gate()
          captions = None
-         if 'a.ru' in source.captions or 'ru' in source.captions:
-            captions = source.captions.get('ru', source.captions.get('a.ru', None))
+         if transcript.language_code == 'ru':
+            captions = YouTubeTranscriptApi.get_transcript(video_id, languages=['ru'])
+            captions_srt = SRTFormatter().format_transcript(captions)
             if not clarify:
                prompt = PROMPT_RU
                # final_prompt = FINAL_PROMPT_RU
@@ -157,28 +170,27 @@ class Summarizer:
             else:
                prompt = f"Это транскрипция к видео в формате SRT. Проанализируй текст и перескажи что говорится про \"{clarify}\". Покажи временные метки где об этом говорится. Если об этом ничего нет напиши 'NOT_FOUND'"
                final_prompt = None
-         elif 'a.en' in source.captions or 'en' in source.captions:
-            captions = source.captions.get('en', source.captions.get('a.en', None))
+         elif transcript.language_code == 'en':
+            captions = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            captions_srt = SRTFormatter().format_transcript(captions)
             if not clarify:
                prompt = PROMPT_EN
-               final_prompt = FINAL_PROMPT_EN
-            else:
-               prompt = f"This is transcript from video in SRT format. Show th etimestamp where it says about {clarify}. If there is nothing about it in the video write 'NOT_FOUND'"
                final_prompt = None
-         if not captions:
+            else:
+               prompt = f"This is transcript from video in SRT format. Show the timestamp where it says about {clarify}. If there is nothing about it in the video write 'NOT_FOUND'"
+               final_prompt = None
+         if not captions_srt:
             raise NoCaptionsException
          
-         # if clarify:
-         text = captions.generate_srt_captions()
-         # else:
-         #    text = xml_caption_to_text(captions.xml_captions)
+         text = captions_srt
+
       except Exception as e:
          logger.error(e)
          raise NoCaptionsException(f"Cannot get captions for video{url}")
 
       reply = self.summarize(text, prompt, final_prompt)
       if not clarify:
-         self.seen[chat_id][source.video_id] = time.time()
+         self.seen[chat_id][video_id] = time.time()
       return reply
 
 if __name__ == '__main__':

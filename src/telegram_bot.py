@@ -9,7 +9,8 @@ import yaml
 from summarizer import Summarizer
 from exceptions import *
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext
+
 
 logger = logging.getLogger('bot')
 
@@ -38,7 +39,7 @@ def setup_logger(log_level: Optional[str]='INFO', logfile: Optional[str]=None) -
         fileHandler.setFormatter(log_formatter)
         logger.addHandler(fileHandler)
 
-def process_request(update: Update, context: CallbackContext, clarify=None) -> None:
+async def process_request(update: Update, context: CallbackContext, clarify=None) -> None:
     if update.message.reply_to_message:
         message = update.message.reply_to_message.text
         logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} received {message}')
@@ -76,7 +77,7 @@ def process_request(update: Update, context: CallbackContext, clarify=None) -> N
     ]
 
     for chunk in chunks:
-        context.bot.send_message(
+        await context.bot.send_message(
             update.message.chat_id,
             reply_to_message_id=update.message.message_id,
             text=chunk,
@@ -84,19 +85,19 @@ def process_request(update: Update, context: CallbackContext, clarify=None) -> N
             entities=update.message.entities
         )
 
-def clarify(update: Update, context: CallbackContext) -> None:
+async def clarify(update: Update, context: CallbackContext) -> None:
     """This handler will exctract YouTube link from the replayed message and will apply custom prompt to it"""
 
     # Print to console
     logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
-    process_request(update=update, context=context, clarify=True)
+    await process_request(update=update, context=context, clarify=True)
 
-def short(update: Update, context: CallbackContext) -> None:
+async def short(update: Update, context: CallbackContext) -> None:
     """This handler will exctract YouTube link from the replayed message and will apply summarize it"""
 
     # Print to console
     logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
-    process_request(update=update, context=context)
+    await process_request(update=update, context=context)
 
 def main() -> None:
     import argparse
@@ -121,21 +122,14 @@ def main() -> None:
     summarizer = Summarizer()
 
     api_token = os.environ.get('TELEGRAM_API_TOKEN', None)
-    updater = Updater(api_token)
-
-    # Get the dispatcher to register handlers
-    # Then, we register each handler and the conditions the update must meet to trigger it
-    dispatcher = updater.dispatcher
+    application = ApplicationBuilder().token(api_token).build()
 
     # Register commands
-    dispatcher.add_handler(CommandHandler("short", short))
-    dispatcher.add_handler(CommandHandler("clarify", clarify))
+    application.add_handler(CommandHandler("short", short))
+    application.add_handler(CommandHandler("clarify", clarify))
 
     # Start the Bot
-    updater.start_polling()
-
-    # Run the bot until you press Ctrl-C
-    updater.idle()
+    application.run_polling()
 
 
 if __name__ == '__main__':
