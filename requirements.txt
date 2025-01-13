@@ -1,5 +1,5 @@
 openai
-pytube==15.0.0
-python-telegram-bot==13.12
+python-telegram-bot==21.8
+youtube-transcript-api==0.6.3
 tiktoken
 pyyaml
