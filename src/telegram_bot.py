@@ -85,6 +85,38 @@ async def process_request(update: Update, context: CallbackContext, clarify=None
             entities=update.message.entities
         )
 
+async def process_free_prompt(update: Update, context: CallbackContext) -> None:
+    try:
+        message = re.sub(r"/prompt|@imikdev_bot", "", update.message.text)
+        reply_message = None
+        if update.message.reply_to_message:
+            reply_message = update.message.reply_to_message.text
+        reply = summarizer.get_free_prompt_reply(chat_id=update.message.chat_id, text=message, reply_message=reply_message)
+    except TooExpensiveException as e:
+        logger.debug(f"Too expensive {e}")
+        reply = f"Братишка, чет дорого выходит {e}."
+    except Exception as e:
+        logger.warning(traceback.format_exc())                        
+        logger.warning(e)      
+        logger.warning(f"Failed to reply with a summary to {message}")
+        reply = f"Что-то пошло не так {message}. Ошибка: {e}"
+        pass
+
+    chunk_size = 3500
+    chunks = [
+        reply[i : i + chunk_size]
+        for i in range(0, len(reply), chunk_size)
+    ]
+
+    for chunk in chunks:
+        await context.bot.send_message(
+            update.message.chat_id,
+            reply_to_message_id=update.message.message_id,
+            text=chunk,
+            # To preserve the markdown, we attach entities (bold, italic...)
+            entities=update.message.entities
+        )
+
 async def clarify(update: Update, context: CallbackContext) -> None:
     """This handler will exctract YouTube link from the replayed message and will apply custom prompt to it"""
 
@@ -98,6 +130,13 @@ async def short(update: Update, context: CallbackContext) -> None:
     # Print to console
     logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
     await process_request(update=update, context=context)
+
+async def prompt(update: Update, context: CallbackContext) -> None:
+    """This handler will use the message as a general prompt"""
+    
+    # Print to console
+    logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
+    await process_free_prompt(update=update, context=context)
 
 def main() -> None:
     import argparse
@@ -127,6 +166,7 @@ def main() -> None:
     # Register commands
     application.add_handler(CommandHandler("short", short))
     application.add_handler(CommandHandler("clarify", clarify))
+    application.add_handler(CommandHandler("prompt", prompt))
 
     # Start the Bot
     application.run_polling()

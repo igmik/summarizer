@@ -92,7 +92,7 @@ class Summarizer:
       chunks = [self.tokenizer.decode(chunk) for chunk in chunks]
       return chunks
 
-   def summarize(self, context: str, prompt: str, final_prompt: str) -> str:
+   def summarize(self, context: str, prompt: str, final_prompt: str, cost_estimate: bool=True) -> str:
       """
       Split long input to chunks
       Generate summary for individual chunk
@@ -132,8 +132,12 @@ class Summarizer:
          final_response = response.choices[0].message.content.strip()
       else:
          final_response = "\n".join(responses)
+
+      if cost_estimate:
+         final_response += cost_line
+
       logger.debug(final_response)
-      return final_response+cost_line
+      return final_response
 
    def get_youtube_summary(self, chat_id: int, text: str, clarify: str=None) -> str:
       """
@@ -192,6 +196,23 @@ class Summarizer:
       if not clarify:
          self.seen[chat_id][video_id] = time.time()
       return reply
+
+   def get_free_prompt_reply(self, chat_id: int, text: str, reply_message: str=None) -> str:
+      """
+      Pass the text to the model backend
+      """    
+      try:
+         prompt = text
+         if reply_message:
+            prompt = f"{reply_message}\n{text}"
+
+         logger.info(f"Processing prompt: {prompt}")
+         reply = self.summarize(prompt, "", "", cost_estimate=False)
+         return reply
+      
+      except Exception as e:
+         logger.error(e)
+         raise e
 
 if __name__ == '__main__':
    summarizer = Summarizer()
