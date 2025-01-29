@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import wraps
 import logging
 import os
 import re
@@ -9,7 +10,7 @@ import yaml
 from summarizer import Summarizer
 from exceptions import *
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext, ConversationHandler
 
 
 logger = logging.getLogger('bot')
@@ -38,6 +39,21 @@ def setup_logger(log_level: Optional[str]='INFO', logfile: Optional[str]=None) -
         fileHandler.setLevel(log_level)
         fileHandler.setFormatter(log_formatter)
         logger.addHandler(fileHandler)
+
+def auth(func):
+    """Decorator to restrict access to whitelisted users."""
+    @wraps(func)
+    async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+        user_id = update.effective_user.id
+        if user_id not in id_whitelist:
+            if update.message:
+                await update.message.reply_text("Access denied. You are not authorized to use this bot.")
+            elif update.callback_query:
+                await update.callback_query.answer("Access denied. You are not authorized to use this bot.", show_alert=True)
+            return ConversationHandler.END
+        return await func(update, context, *args, **kwargs)
+    return wrapper
+
 
 async def process_request(update: Update, context: CallbackContext, clarify=None) -> None:
     if update.message.reply_to_message:
@@ -117,6 +133,7 @@ async def process_free_prompt(update: Update, context: CallbackContext) -> None:
             entities=update.message.entities
         )
 
+@auth
 async def clarify(update: Update, context: CallbackContext) -> None:
     """This handler will exctract YouTube link from the replayed message and will apply custom prompt to it"""
 
@@ -124,6 +141,7 @@ async def clarify(update: Update, context: CallbackContext) -> None:
     logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
     await process_request(update=update, context=context, clarify=True)
 
+@auth
 async def short(update: Update, context: CallbackContext) -> None:
     """This handler will exctract YouTube link from the replayed message and will apply summarize it"""
 
@@ -131,6 +149,7 @@ async def short(update: Update, context: CallbackContext) -> None:
     logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
     await process_request(update=update, context=context)
 
+@auth
 async def prompt(update: Update, context: CallbackContext) -> None:
     """This handler will use the message as a general prompt"""
     
