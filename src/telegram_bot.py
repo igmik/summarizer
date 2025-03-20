@@ -45,7 +45,8 @@ def auth(func):
     @wraps(func)
     async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
         user_id = update.effective_user.id
-        if user_id not in id_whitelist:
+        chat_id = update.message.chat_id
+        if user_id not in id_whitelist and chat_id not in id_whitelist:
             if update.message:
                 await update.message.reply_text("Access denied. You are not authorized to use this bot.")
             elif update.callback_query:
