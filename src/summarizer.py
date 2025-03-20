@@ -1,6 +1,7 @@
 import collections
 from html import unescape
 import logging
+import os
 import re
 import time
 from typing import List
@@ -22,7 +23,7 @@ FINAL_PROMPT_RU = "Пронумеруй каждый тезис заново."
 PROMPT_EN = "This is a transcript in SRT format. Summarize main points from the text and add the timestamps for each point."
 FINAL_PROMPT_EN = "Renumerate each point again."
 
-PRICE = {'gpt-3.5-turbo': 0.0005, 'gpt-4o': 0.005, 'gpt-4o-mini': 0.00015}
+PRICE = {'gpt-3.5-turbo': 0.0005, 'gpt-4o': 0.005, 'gpt-4o-mini': 0.00015, 'deepseek-chat': 0.00007}
 
 
 def get_youtube_url(text:str) -> str:
@@ -63,7 +64,7 @@ def xml_caption_to_text(xml_captions: str) -> str:
 class Summarizer:
    """Main summarizer logic."""
 
-   def __init__(self, chat_model: str='gpt-4o-mini', model_token_limit: int=128000) -> None:
+   def __init__(self, chat_model: str='deepseek-chat', base_url: str='https://api.deepseek.com', model_token_limit: int=64000) -> None:
       """Construct a :class:`Summarizer <Summarizer>`.
 
       :param chat_model:
@@ -71,11 +72,15 @@ class Summarizer:
       :param model_token_limit:
          Max token limit that backend model supports
       """
-      self.client = OpenAI()
+      self.base_url = base_url
       self.chat_model = chat_model
-      self.max_tokens = 55000
+      api_key = os.environ.get('OPENAI_API_KEY', None)
+      if not api_key:
+         raise Exception("API key is not set in the environment variable OPENAI_API_KEY") 
+      self.client = OpenAI(api_key=api_key, base_url=base_url)
+      self.max_tokens = 50000
       self.model_token_limit = model_token_limit
-      self.tokenizer = tiktoken.encoding_for_model(chat_model)
+      self.tokenizer = tiktoken.encoding_for_model('gpt-4o')
       self.seen = collections.defaultdict(dict)
 
    def split_to_chunks(self, text_data: str, prompt: str) -> List[str]:

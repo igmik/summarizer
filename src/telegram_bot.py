@@ -176,9 +176,11 @@ def main() -> None:
     id_whitelist = config.get('whitelist', [])
     if not id_whitelist:
         id_whitelist.append(AlwaysInWhitelist())
+    
+    base_url = config.get('base_url', "https://api.deepseek.com")
 
     global summarizer
-    summarizer = Summarizer()
+    summarizer = Summarizer(base_url=base_url)
 
     api_token = os.environ.get('TELEGRAM_API_TOKEN', None)
     application = ApplicationBuilder().token(api_token).build()
