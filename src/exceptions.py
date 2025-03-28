@@ -9,3 +9,6 @@ class NoCaptionsException(Exception):
 
 class TooExpensiveException(Exception):
     pass
+
+class TooLongMessageException(Exception):
+    pass

@@ -64,7 +64,7 @@ def xml_caption_to_text(xml_captions: str) -> str:
 class Summarizer:
    """Main summarizer logic."""
 
-   def __init__(self, chat_model: str='deepseek-chat', base_url: str='https://api.deepseek.com', model_token_limit: int=64000) -> None:
+   def __init__(self, chat_model: str='deepseek-chat', base_url: str='https://api.deepseek.com', model_token_limit: int=64000, youtube_api_proxies: dict[str, str]=None) -> None:
       """Construct a :class:`Summarizer <Summarizer>`.
 
       :param chat_model:
@@ -78,6 +78,7 @@ class Summarizer:
       if not api_key:
          raise Exception("API key is not set in the environment variable OPENAI_API_KEY") 
       self.client = OpenAI(api_key=api_key, base_url=base_url)
+      self.youtube_api_proxies = youtube_api_proxies
       self.max_tokens = 50000
       self.model_token_limit = model_token_limit
       self.tokenizer = tiktoken.encoding_for_model('gpt-4o')
@@ -160,7 +161,7 @@ class Summarizer:
       if not video_id:
          raise NotYoutubeUrlException(f"Url {url} is not a YouTube url as it doesn't contain video ID")
       
-      transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+      transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=self.youtube_api_proxies)
       transcript = transcript_list.find_transcript(['ru', 'en'])
       
       if chat_id in self.seen and not clarify:
@@ -170,7 +171,7 @@ class Summarizer:
       try:
          captions = None
          if transcript.language_code == 'ru':
-            captions = YouTubeTranscriptApi.get_transcript(video_id, languages=['ru'])
+            captions = YouTubeTranscriptApi.get_transcript(video_id, languages=['ru'], proxies=self.youtube_api_proxies)
             captions_srt = SRTFormatter().format_transcript(captions)
             if not clarify:
                prompt = PROMPT_RU
@@ -180,7 +181,7 @@ class Summarizer:
                prompt = f"Это транскрипция к видео в формате SRT. Проанализируй текст и перескажи что говорится про \"{clarify}\". Покажи временные метки где об этом говорится. Если об этом ничего нет напиши 'NOT_FOUND'"
                final_prompt = None
          elif transcript.language_code == 'en':
-            captions = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            captions = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'], proxies=self.youtube_api_proxies)
             captions_srt = SRTFormatter().format_transcript(captions)
             if not clarify:
                prompt = PROMPT_EN
@@ -202,22 +203,6 @@ class Summarizer:
          self.seen[chat_id][video_id] = time.time()
       return reply
 
-   def get_free_prompt_reply(self, chat_id: int, text: str, reply_message: str=None) -> str:
-      """
-      Pass the text to the model backend
-      """    
-      try:
-         prompt = text
-         if reply_message:
-            prompt = f"{reply_message}\n{text}"
-
-         logger.info(f"Processing prompt: {prompt}")
-         reply = self.summarize(prompt, "", "", cost_estimate=False)
-         return reply
-      
-      except Exception as e:
-         logger.error(e)
-         raise e
 
 if __name__ == '__main__':
    summarizer = Summarizer()

@@ -7,10 +7,11 @@ import traceback
 from typing import Optional
 
 import yaml
+from chat import Chat
 from summarizer import Summarizer
 from exceptions import *
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext, ConversationHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext, ConversationHandler, MessageHandler, filters
 
 
 logger = logging.getLogger('bot')
@@ -102,16 +103,22 @@ async def process_request(update: Update, context: CallbackContext, clarify=None
             entities=update.message.entities
         )
 
-async def process_free_prompt(update: Update, context: CallbackContext) -> None:
+async def process_free_chat(update: Update, context: CallbackContext) -> None:
     try:
-        message = re.sub(r"/prompt|@imikdev_bot", "", update.message.text)
-        reply_message = None
-        if update.message.reply_to_message:
-            reply_message = update.message.reply_to_message.text
-        reply = summarizer.get_free_prompt_reply(chat_id=update.message.chat_id, text=message, reply_message=reply_message)
-    except TooExpensiveException as e:
-        logger.debug(f"Too expensive {e}")
-        reply = f"Братишка, чет дорого выходит {e}."
+        message = update.message.text
+        if context.bot.username in message:
+            message = re.sub(f"@{context.bot.username}", "", message).strip()
+        if "/prompt" in message:
+            message = re.sub(r"/prompt|@imikdev_bot", "", message).strip()
+
+        chat_id = update.message.chat_id
+        id = update.message.message_id
+        reply_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
+        reply = free_chat.free_chat(message, chat_id=chat_id, message_id=id, reply_id=reply_id)
+        content = reply["content"]
+    except TooLongMessageException as e:
+        logger.debug(f"Too long {e}")
+        reply = f"Наш разговор получился слишком длинным. Давай начнем с чистого листа. {e}."
     except Exception as e:
         logger.warning(traceback.format_exc())                        
         logger.warning(e)      
@@ -121,18 +128,19 @@ async def process_free_prompt(update: Update, context: CallbackContext) -> None:
 
     chunk_size = 3500
     chunks = [
-        reply[i : i + chunk_size]
+        content[i : i + chunk_size]
         for i in range(0, len(reply), chunk_size)
     ]
 
     for chunk in chunks:
-        await context.bot.send_message(
+        sent_message = await context.bot.send_message(
             update.message.chat_id,
             reply_to_message_id=update.message.message_id,
             text=chunk,
             # To preserve the markdown, we attach entities (bold, italic...)
-            entities=update.message.entities
+            # entities=update.message.entities
         )
+    free_chat.conversation[chat_id][sent_message.message_id] = {"request": reply, "reply_id": update.message.message_id}
 
 @auth
 async def clarify(update: Update, context: CallbackContext) -> None:
@@ -153,10 +161,15 @@ async def short(update: Update, context: CallbackContext) -> None:
 @auth
 async def prompt(update: Update, context: CallbackContext) -> None:
     """This handler will use the message as a general prompt"""
-    
-    # Print to console
+
     logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
-    await process_free_prompt(update=update, context=context)
+    await process_free_chat(update=update, context=context)
+
+@auth
+async def handle_direct_message(update: Update, context: CallbackContext) -> None:
+    """Process messages sent directly to the bot or mentioned in a group."""
+    logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
+    await process_free_chat(update=update, context=context)
 
 def main() -> None:
     import argparse
@@ -179,16 +192,33 @@ def main() -> None:
     
     base_url = config.get('base_url', "https://api.deepseek.com")
 
+    proxies = config.get('youtube_api_proxies', None)
+    if not proxies:
+        proxies = {}
+        if os.environ.get('HTTP_PROXY', None):
+            proxies['http'] = os.environ['HTTP_PROXY']
+        if os.environ.get('HTTPS_PROXY', None):
+            proxies['https'] = os.environ['HTTPS_PROXY']
+
     global summarizer
-    summarizer = Summarizer(base_url=base_url)
+    summarizer = Summarizer(base_url=base_url, youtube_api_proxies=proxies)
+    
+    global free_chat
+    free_chat = Chat(base_url=base_url)
 
     api_token = os.environ.get('TELEGRAM_API_TOKEN', None)
     application = ApplicationBuilder().token(api_token).build()
+
+    # Initialize the bot asynchronously
+    bot_username = "imikdev_bot"
 
     # Register commands
     application.add_handler(CommandHandler("short", short))
     application.add_handler(CommandHandler("clarify", clarify))
     application.add_handler(CommandHandler("prompt", prompt))
+
+    # Register direct message handler
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_direct_message))
 
     # Start the Bot
     application.run_polling()
