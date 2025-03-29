@@ -30,8 +30,12 @@ class Chat:
         self.model_token_limit = model_token_limit
         self.tokenizer = tiktoken.encoding_for_model('gpt-4o')
         self.conversation = defaultdict(dict)
+        self.system_prompt = defaultdict(dict)
     
-    def free_chat(self, message: str, chat_id:str, message_id: int, reply_id: int=None) -> str:
+    def set_system_prompt(self, chat_id: str, user_id: str, prompt: str) -> None:
+        self.system_prompt[chat_id][user_id] = prompt
+    
+    def free_chat(self, message: str, chat_id:str, user_id:str, message_id: int, reply_id: int=None) -> str:
         """
         Calculate the length of the conversation in number of tokens
         Process all messages if the request fits the model
@@ -45,12 +49,19 @@ class Chat:
             requests.append(conversation[reply_id]["request"])
             reply_id = conversation[reply_id]["reply_id"]
 
+        system_prompt = ""
+        if chat_id in self.system_prompt:
+            system_prompt = self.system_prompt[chat_id].get(user_id, "")
+        
+        if system_prompt:
+            requests.append({"role": "system", "content": system_prompt})
+
         concatenated_messages = " ".join(r["content"] for r in requests)
         tokens = self.tokenizer.encode(concatenated_messages)
         logger.info(f"The length is {len(tokens)}")
         if len(tokens) > self.max_tokens:
             raise TooLongMessageException(len(tokens))
-        
+
         requests.reverse()
         
         response = self.client.chat.completions.create(

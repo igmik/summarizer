@@ -103,6 +103,21 @@ async def process_request(update: Update, context: CallbackContext, clarify=None
             entities=update.message.entities
         )
 
+async def process_system_prompt(update: Update, context: CallbackContext) -> None:
+    message = update.message.text
+    if "/system" in message:
+        message = re.sub(r"/system|@imikdev_bot", "", message).strip()
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    free_chat.set_system_prompt(chat_id, user_id, message)
+
+    await context.bot.send_message(
+        chat_id,
+        reply_to_message_id=update.message.message_id,
+        text=f"Системный промпт установлен на {message}"
+    )
+
+
 async def process_free_chat(update: Update, context: CallbackContext) -> None:
     try:
         message = update.message.text
@@ -112,9 +127,10 @@ async def process_free_chat(update: Update, context: CallbackContext) -> None:
             message = re.sub(r"/prompt|@imikdev_bot", "", message).strip()
 
         chat_id = update.message.chat_id
+        user_id = update.message.from_user.id
         id = update.message.message_id
         reply_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
-        reply = free_chat.free_chat(message, chat_id=chat_id, message_id=id, reply_id=reply_id)
+        reply = free_chat.free_chat(message, chat_id=chat_id, user_id=user_id, message_id=id, reply_id=reply_id)
         content = reply["content"]
     except TooLongMessageException as e:
         logger.debug(f"Too long {e}")
@@ -157,6 +173,13 @@ async def short(update: Update, context: CallbackContext) -> None:
     # Print to console
     logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
     await process_request(update=update, context=context)
+
+@auth
+async def system(update: Update, context: CallbackContext) -> None:
+    """This handler will use the message to set a system prompt"""
+
+    logger.info(f'From {update.message.chat_id}: {update.message.from_user.name} wrote {update.message.text}')
+    await process_system_prompt(update=update, context=context)
 
 @auth
 async def prompt(update: Update, context: CallbackContext) -> None:
@@ -216,6 +239,7 @@ def main() -> None:
     application.add_handler(CommandHandler("short", short))
     application.add_handler(CommandHandler("clarify", clarify))
     application.add_handler(CommandHandler("prompt", prompt))
+    application.add_handler(CommandHandler("system", system))
 
     # Register direct message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_direct_message))
